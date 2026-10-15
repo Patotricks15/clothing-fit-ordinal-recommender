@@ -74,6 +74,14 @@ class FeatureStore:
         self.global_mismatch_rate = float(
             dataset.frame["fit"].isin(interaction_features.MISMATCH_LEVELS).mean()
         )
+        self.categories_ = {
+            col: sorted(dataset.frame[raw_col].dropna().unique().tolist())
+            for col, raw_col in (
+                ("user_body_type", "body_type"),
+                ("item_category", "category"),
+                ("context_rented_for", "rented_for"),
+            )
+        }
 
     def transform(self, rows: pd.DataFrame) -> pd.DataFrame:
         """Build the full feature matrix for an arbitrary set of rows.
@@ -123,6 +131,40 @@ class FeatureStore:
     def row_vector(self, row: pd.Series) -> dict[str, float | str]:
         """Featurize a single serving-time row (e.g. an API request)."""
         return self.transform(pd.DataFrame([row])).iloc[0].to_dict()
+
+    def design_matrix_columns(self) -> list[str]:
+        """Fixed column order of :meth:`encode`'s numeric design matrix."""
+        columns = list(STATIC_COLUMNS) + list(HISTORICAL_COLUMNS)
+        for col in CATEGORICAL_COLUMNS:
+            for value in self.categories_[col]:
+                columns.append(f"{col}={value}")
+        return columns
+
+    def encode(self, features: pd.DataFrame) -> np.ndarray:
+        """One-hot encode categoricals (fixed category set) + numeric passthrough.
+
+        Using the category set fitted from the whole dataset (not re-derived
+        per call) keeps the design matrix's column count and meaning
+        identical across train, validation, test and single-row serving
+        requests -- an unseen category at serving time simply activates no
+        one-hot column, rather than shifting every other column's index.
+
+        Args:
+            features: Output of :meth:`transform`.
+
+        Returns:
+            A dense ``float64`` array, columns ordered per
+            :meth:`design_matrix_columns`.
+        """
+        numeric = features[STATIC_COLUMNS + HISTORICAL_COLUMNS].to_numpy(dtype=np.float64)
+        blocks = [numeric]
+        for col in CATEGORICAL_COLUMNS:
+            values = features[col].to_numpy()
+            one_hot = np.zeros((len(features), len(self.categories_[col])), dtype=np.float64)
+            for j, category in enumerate(self.categories_[col]):
+                one_hot[:, j] = values == category
+            blocks.append(one_hot)
+        return np.concatenate(blocks, axis=1)
 
     def to_frame(self, rows: pd.DataFrame) -> pd.DataFrame:
         """Convenience: featurize and append ``fit_code``/``fit`` for training."""
