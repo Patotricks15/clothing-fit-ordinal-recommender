@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -19,10 +20,14 @@ def test_build_indexed_dataset_assigns_contiguous_indices(dataset) -> None:
 
 
 def test_review_order_is_strictly_increasing_per_user(dataset) -> None:
+    """The frame is already sorted by (user, review_date); review_order must
+    follow that existing row order exactly -- re-sorting by review_date here
+    would be ambiguous whenever two reviews share the same date.
+    """
     frame = dataset.frame
-    for _, group in frame.groupby("user_index"):
-        orders = group.sort_values("review_date")["review_order"].to_numpy()
-        assert (orders == sorted(orders)).all()
+    for _, group in frame.groupby("user_index", sort=False):
+        orders = group["review_order"].to_numpy()
+        assert (orders == np.arange(len(orders))).all()
         assert len(set(orders)) == len(orders)
 
 
