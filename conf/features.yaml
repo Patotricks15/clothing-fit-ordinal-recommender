@@ -1,0 +1,205 @@
+# Declarative feature specification.
+#
+# This file is the single source of truth consumed by both the training job
+# and the serving path. The registry validates that every declared feature
+# has an implementation and that every implementation is declared.
+#
+# fit_on: catalogue   -> statistic is fit once over the entire item catalogue
+# fit_on: none        -> no fitting needed: pure per-row / per-row-expanding function
+# point_in_time: true -> only reviews strictly before the cut-off count
+#
+# IMPORTANT distinction for this dataset:
+#   - "static" features (body measurements, body type, item category) exist
+#     before the user ever reviews anything. They are known at acquisition
+#     time and are NOT subject to a point-in-time cut-off; they need no fit
+#     stage at all because they are read directly off each row.
+#   - "historical aggregate" features (a user's or item's past mismatch
+#     rate) are *expanding* statistics: each row's value is computed from
+#     only the strictly-prior reviews of that same user/item (review_order
+#     or global_order < this row's own position), never from the row's own
+#     outcome or from anything later. They need no separate "fit on train"
+#     step -- the cut-off is intrinsic to each row's position in the full
+#     chronology -- but they are exactly the features that can silently leak
+#     the label if the strict "<" is ever relaxed to "<=" or the ordering is
+#     dropped, which is why they get dedicated leakage tests.
+
+version: 1
+
+features:
+  # --- Static user attributes (no cut-off: known before any review) --------
+  - name: user_height_cm
+    family: user
+    dtype: float32
+    transform: user_height_cm
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Height is a static body measurement available at account creation; it
+      is never derived from interaction history, so no cut-off applies.
+
+  - name: user_weight_kg
+    family: user
+    dtype: float32
+    transform: user_weight_kg
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Weight is a static body measurement with the same cold-start-safe
+      status as height.
+
+  - name: user_bmi
+    family: user
+    dtype: float32
+    transform: user_bmi
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Body-mass index derived purely from the two static measurements above;
+      still static, since it uses no interaction history.
+
+  - name: user_bust_band
+    family: user
+    dtype: float32
+    transform: user_bust_band
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Numeric band parsed from the static "bust size" string (e.g. "34b" ->
+      34); informs chest-fit sensitivity independent of any order history.
+
+  - name: user_bust_cup_ordinal
+    family: user
+    dtype: float32
+    transform: user_bust_cup_ordinal
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: constant, value: 0.0}
+    rationale: >
+      Ordinal-encoded cup letter from the static bust-size string; static,
+      like the band it is parsed alongside.
+
+  - name: user_body_type
+    family: user
+    dtype: object
+    transform: user_body_type
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: constant, value: "unknown"}
+    rationale: >
+      Self-reported body-type category, a static profile attribute set once
+      and not derived from any purchase.
+
+  - name: user_age
+    family: user
+    dtype: float32
+    transform: user_age
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Static demographic attribute, known independent of order history.
+
+  # --- Static item attributes (no cut-off: catalogue facts) -----------------
+  - name: item_category
+    family: item
+    dtype: object
+    transform: item_category
+    params: {}
+    fit_on: catalogue
+    point_in_time: false
+    fill: {strategy: constant, value: "unknown"}
+    rationale: >
+      Garment category is a catalogue fact known before any purchase, so it
+      is available even for items with no training interactions.
+
+  - name: item_nominal_size
+    family: item
+    dtype: float32
+    transform: item_nominal_size
+    params: {}
+    fit_on: catalogue
+    point_in_time: false
+    fill: {strategy: global_mean}
+    rationale: >
+      Modal purchased size for the item; a catalogue-level summary available
+      before an individual review exists for a held-out user.
+
+  # --- Historical aggregates (STRICT point-in-time: review_order < cutoff) --
+  - name: user_prior_review_count
+    family: interaction
+    dtype: float32
+    transform: user_prior_review_count
+    params: {}
+    fit_on: none
+    point_in_time: true
+    fill: {strategy: constant, value: 0.0}
+    rationale: >
+      How many reviews the user has posted before this one. Separates
+      first-time shoppers (no personal history to calibrate against) from
+      experienced reviewers.
+
+  - name: user_prior_mismatch_rate
+    family: interaction
+    dtype: float32
+    transform: user_prior_mismatch_rate
+    params: {unrated_fallback: 0.5}
+    fit_on: none
+    point_in_time: true
+    fill: {strategy: global_mean}
+    rationale: >
+      Fraction of the user's PRIOR reviews (strictly before the cut-off) that
+      were "small" or "large" rather than "fit". A user with a history of
+      mismatches is more likely to mismatch again; using future reviews here
+      would leak the label being predicted.
+
+  - name: user_prior_small_rate
+    family: interaction
+    dtype: float32
+    transform: user_prior_small_rate
+    params: {}
+    fit_on: none
+    point_in_time: true
+    fill: {strategy: constant, value: 0.0}
+    rationale: >
+      Fraction of prior reviews that ran "small" on this user specifically
+      (directional bias), computed with the same strict cut-off as the
+      overall mismatch rate.
+
+  - name: item_prior_mismatch_rate
+    family: interaction
+    dtype: float32
+    transform: item_prior_mismatch_rate
+    params: {}
+    fit_on: none
+    point_in_time: true
+    fill: {strategy: global_mean}
+    rationale: >
+      Fraction of an item's PRIOR reviews (across all users, strictly before
+      the cut-off) that were not "fit". This is a leakage-sensitive signal:
+      it must never include the row being predicted or any later review of
+      the same item.
+
+  # --- Context (known at request time, no interaction history needed) -------
+  - name: context_rented_for
+    family: context
+    dtype: object
+    transform: context_rented_for
+    params: {}
+    fit_on: none
+    point_in_time: false
+    fill: {strategy: constant, value: "unknown"}
+    rationale: >
+      The stated occasion (e.g. "wedding", "work") is supplied by the
+      shopper at request time, like a search filter; it is context about the
+      current transaction, not a historical aggregate, so no cut-off applies.

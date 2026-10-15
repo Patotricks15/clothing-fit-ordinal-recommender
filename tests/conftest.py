@@ -44,7 +44,7 @@ def split(dataset):
 
 
 @pytest.fixture(scope="session")
-def feature_store(split, dataset):
+def feature_store(dataset):
     from recommender.features import build_features
 
-    return build_features(split, dataset)
+    return build_features(dataset)
