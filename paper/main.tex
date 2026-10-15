@@ -1,0 +1,77 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+
+\newcommand{\Rset}{\mathcal{R}}
+\newcommand{\Dset}{\mathcal{D}}
+\newcommand{\wvec}{\mathbf{w}}
+\newcommand{\xvec}{\mathbf{x}}
+
+\title{\textbf{Ordinal Logistic Regression with Split Conformal Prediction}\\[0.4em]
+\large for Clothing Fit Recommendation\\
+\large A classical machine learning pipeline with calibrated uncertainty}
+
+\author{Patrick Oliveira}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We predict clothing fit (\emph{small}, \emph{fit}, \emph{large}) as an
+\emph{ordinal} classification problem using a proportional-odds cumulative
+link model, trained by maximizing the likelihood with
+\texttt{scipy.optimize} -- classical machine learning, with no neural
+network anywhere in the pipeline. We wrap the fitted model in split
+conformal prediction, implemented from scratch in NumPy, to turn a bare
+point prediction into a calibrated \emph{set} of plausible fit outcomes with
+a distribution-free marginal coverage guarantee. Users are split at the
+group level (train/validation/test share no user) so the model is evaluated
+on genuinely unseen shoppers, not on memorized body measurements. On a
+synthetic fixture matching the real dataset's clustering and class skew, the
+ordinal model attains a mean absolute ordinal error of
+$0.3535$ versus $0.4397$ for a majority-class floor and
+$0.6298$ for an unordered multinomial logistic regression baseline with
+identical features, and the conformal wrapper achieves
+$88.55\%$ empirical coverage against a $90\%$ target. We state explicitly
+why standard ranking metrics (NDCG, Recall@K, MAP) do not apply to this
+problem.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Notation}
+\label{sec:notation}
+
+Let $K$ denote the number of ordered fit levels; throughout, $K = 3$ with
+levels $\{\text{small}, \text{fit}, \text{large}\}$ encoded as
+$y \in \{0, 1, 2\}$ in that order. A feature vector $\xvec \in \mathbb{R}^d$
+describes one (user, item, requested size) review. The logistic function is
+$\sigma(z) = (1 + e^{-z})^{-1}$. Weights are written $\wvec \in \mathbb{R}^d$
+and ordered thresholds $\theta_1 < \theta_2 < \dots < \theta_{K-1}$.
+
+\input{sections/01-introduction}
+\input{sections/02-data}
+\input{sections/03-feature-engineering}
+\input{sections/04-methodology}
+\input{sections/05-evaluation}
+\input{sections/06-results}
+\input{sections/07-conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,54 @@
+\section{Data}
+\label{sec:data}
+
+\subsection{Source}
+
+The target dataset is the Clothing Fit Dataset for Size Recommendation
+(Kaggle: \texttt{rmisra/clothing-fit-dataset-for-size-recommendation})~\cite{misra2018decomposing},
+covering garment reviews from online rental and retail marketplaces. Each
+review carries static shopper body measurements (height, weight, bust size,
+body type, age), an item identifier and category, the purchased garment
+size, and the ordinal outcome \texttt{fit} $\in \{\text{small}, \text{fit},
+\text{large}\}$.
+
+\subsection{Synthetic fixture}
+
+\texttt{scripts/download\_data.py} defaults to a synthetic generator (no
+Kaggle account required, so the full pipeline -- including CI -- runs from a
+clean checkout) that reproduces the dataset's structural properties rather
+than its exact values:
+
+\begin{itemize}
+  \item \textbf{Clustered users and items.} Each user has a latent "true
+        size"; each item has a nominal size and a fit sensitivity. Users
+        self-select garments close to their own size (as real shoppers do),
+        with enough spread that mismatches still occur regularly.
+  \item \textbf{Skewed fit distribution.} The probability of \emph{small}
+        or \emph{large} rises smoothly with the gap between a user's true
+        size and the purchased item's nominal size, scaled by the item's
+        sensitivity. The resulting label distribution is skewed toward
+        \emph{fit} ($56.0\%$ fit, $23.3\%$ small, $20.7\%$ large in the
+        fixture used for Table~\ref{tab:results}), matching the real
+        dataset's class imbalance.
+  \item \textbf{True chronology.} Every review carries a \texttt{review\_date},
+        so the point-in-time machinery (Section~\ref{sec:feature-engineering})
+        is exercised against real ordering, not an append-order proxy.
+\end{itemize}
+
+A \texttt{--kaggle} flag downloads the real dataset via the Kaggle API when
+\texttt{KAGGLE\_USERNAME}/\texttt{KAGGLE\_KEY} are set in the environment;
+credentials are never read from or written to the repository.
+
+\subsection{Grouped user split}
+
+Train, validation and test partitions are formed by randomly assigning
+\emph{users} (not rows) to a partition, so every review by a given user lands
+in exactly one partition
+(\texttt{recommender.data.splitting.grouped\_user\_split}). This is distinct
+from -- and in addition to -- the point-in-time cut-off described in
+Section~\ref{sec:feature-engineering}: it specifically prevents a model from
+learning "this exact combination of height/weight/body-type always runs
+small" from a user's train-partition reviews and then trivially matching it
+against the same user's test-partition reviews. \texttt{GroupSplit} raises if
+construction ever produces an overlapping user across partitions, and this is
+asserted directly in \texttt{tests/test\_features\_leakage.py}.

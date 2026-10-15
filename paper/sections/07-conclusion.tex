@@ -1,0 +1,53 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We treated clothing-fit prediction as what it structurally is -- an ordinal
+classification problem over three ordered levels -- rather than defaulting
+to an unordered multinomial classifier or collapsing it into a binary
+signal, and paired the fitted model with split conformal prediction so its
+output is a calibrated set, not a bare label. Both pieces are classical
+machine learning: a cumulative link model fit by maximizing an explicit
+likelihood with \texttt{scipy.optimize}, and a closed-form calibration
+procedure over a held-out partition, implemented from scratch in NumPy. No
+neural network, embedding layer, or gradient-descent training loop appears
+anywhere in the pipeline.
+
+The ordinal structure measurably helped: against an unordered multinomial
+logistic regression trained on identical features, the proportional-odds
+model nearly halved the mean absolute ordinal error ($0.3535$ versus
+$0.6298$) and produced visibly tighter conformal sets ($1.72$ versus $2.08$
+classes on average) at the same target coverage. Against the naive
+majority-class floor, it traded a small amount of macro F1 generosity to
+the majority class for a model that actually uses the shopper's and
+garment's features, reflected in more than double the majority baseline's
+macro F1.
+
+\subsection{Limitations}
+
+\textbf{Synthetic fixture.} All numbers in this report are computed on the
+synthetic fixture, not the real Kaggle dataset; \texttt{scripts/download\_data.py
+--kaggle} provides the path to real data when credentials are available, and
+the feature pipeline, model, and tests are schema-driven rather than tuned to
+the fixture's specific distribution.
+
+\textbf{Proportional-odds assumption.} The shared-weight cumulative link
+model assumes every feature's effect on the cumulative log-odds is constant
+across thresholds. If, for example, body type affected the \emph{small}
+threshold very differently from the \emph{large} threshold, a
+non-proportional (threshold-varying) extension would fit better; we did not
+find evidence requiring that extra complexity on this fixture, but a
+partial-proportional-odds variant is the natural next step on real data.
+
+\textbf{Conformal set size on a 3-class problem.} With only three classes,
+an "informative" conformal set can only take sizes $\{1, 2, 3\}$; the method
+scales more informatively to problems with more ordinal levels (e.g. a 5-star
+or 10-point sizing scale), where a tight conformal set communicates
+substantially more than it can here.
+
+\subsection{What a reader should take away}
+
+The point this project makes is not that an ordinal model is marginally more
+accurate. It is that treating an explicitly ordered outcome as ordered, and
+reporting a model's own uncertainty honestly instead of suppressing it behind
+a single confident label, are both small implementation choices with an
+outsized effect on whether a recommendation can be trusted.

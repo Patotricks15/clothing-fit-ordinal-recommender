@@ -1,0 +1,70 @@
+\section{Evaluation protocol}
+\label{sec:evaluation}
+
+\subsection{Partitioning}
+
+Users are randomly assigned to train ($70\%$), validation ($15\%$) and test
+($15\%$), and every review by a given user lands in exactly one partition
+(\texttt{grouped\_user\_split}, Section~\ref{sec:data}). The split is
+reconstructed and checked for user overlap on every call
+(\texttt{GroupSplit.\_\_post\_init\_\_}), and
+\texttt{tests/test\_features\_leakage.py} asserts that attempting to build a
+split from row-sliced (rather than user-grouped) partitions raises.
+
+\subsection{Metrics}
+
+\paragraph{Mean absolute ordinal error.} With $y_i \in \{0, 1, 2\}$ the true
+level and $\hat{y}_i$ the predicted level,
+\begin{equation}
+  \text{MAE}_{\text{ord}} = \frac{1}{n} \sum_{i=1}^{n} \lvert y_i - \hat{y}_i \rvert.
+\end{equation}
+Unlike plain accuracy, this distinguishes a \emph{small}-predicted-as-\emph{large}
+error (distance 2) from a \emph{small}-predicted-as-\emph{fit} error
+(distance 1) -- the entire reason to treat the problem as ordinal.
+
+\paragraph{Accuracy within one level.} The fraction of predictions at most
+one ordinal step from the truth, $\frac{1}{n}\sum_i
+\mathbb{1}[\lvert y_i - \hat{y}_i\rvert \le 1]$ -- a tolerant metric that
+still distinguishes a model that is occasionally off by one level from one
+that confuses \emph{small} and \emph{large} outright.
+
+\paragraph{Macro F1.} Unweighted mean of per-class F1, reported because
+accuracy alone is a weak signal under the dataset's class skew (the majority
+baseline attains high accuracy and within-one-level scores by predicting
+"fit" for everyone, but a macro F1 near the single-class floor).
+
+\paragraph{Conformal coverage and average set size.} Empirical fraction of
+test examples whose true label is included in the conformal set
+(Equation~\ref{eq:prediction-set}), and the mean set cardinality. Coverage
+should sit near the target $1-\alpha$; set size is the cost of that
+guarantee -- a trivial predictor could "achieve" perfect coverage by
+returning every class every time (as the majority baseline does in
+Table~\ref{tab:conformal}), which is why set size must always be read
+alongside coverage, not instead of it.
+
+\paragraph{What we do not report, and why.} NDCG@K, Recall@K and MAP are
+absent from this report by design, not omission; see
+Section~\ref{sec:why-not-ranking} for the argument.
+
+\subsection{Model selection and test discipline}
+
+Every model's hyperparameters ($\ell_2$ strength for both logistic models)
+were selected by inspecting validation-partition metrics; the test partition
+is touched only once, by \texttt{scripts/export\_results\_table.py}, to
+produce Table~\ref{tab:results}. The conformal calibration set is the
+validation partition, disjoint from both the training data the model's
+\emph{parameters} were fit on and the test data its \emph{coverage} is
+measured on -- using the same partition for fitting the model and
+calibrating the conformal wrapper would violate the exchangeability
+assumption the coverage guarantee (Equation~\ref{eq:coverage-guarantee})
+depends on.
+
+\subsection{Training/serving parity}
+
+\texttt{tests/test\_serving.py} asserts every precomputed payload's predicted
+class is a member of its own conformal set (the fitted model's own top
+choice can never be excluded by its own calibrated threshold), that
+class probabilities sum to one, that request ids are unique, and that the
+full payload is JSON-serializable -- the same check the reference
+BPR/SVD portfolio projects use to catch NumPy-scalar serialization failures
+before they reach a Lambda deployment.

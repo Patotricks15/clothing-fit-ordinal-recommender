@@ -1,0 +1,41 @@
+\section{Results}
+\label{sec:results}
+
+\input{tables/results}
+
+Table~\ref{tab:results} reports point-prediction quality on the held-out test
+partition. The ordinal model attains the lowest mean absolute ordinal error
+by a wide margin over both baselines, confirming that the proportional-odds
+structure is doing real work: the multinomial baseline sees identical
+features but, lacking the shared-weight ordinal constraint, distributes its
+probability mass less efficiently across adjacent levels and pays for it
+on every ordinal-aware metric. The majority baseline's accuracy-within-one
+score of $1.0000$ is a direct consequence of always predicting "fit" (the
+dataset's modal class) under a tolerance of one level either side --
+illustrating exactly why within-one accuracy must be read alongside mean
+absolute error and macro F1, not instead of them: its macro F1 of
+$0.2394$ is the lowest of the three models, reflecting that it is correct
+only on the majority class.
+
+\input{tables/conformal-results}
+
+Table~\ref{tab:conformal} reports the split conformal calibration at a
+$90\%$ target coverage, calibrated on the validation partition and
+evaluated on test. The ordinal model's conformal sets attain empirical
+coverage close to the $90\%$ target while remaining the most informative:
+an average set size of $1.72$ out of $3$ possible classes, versus $2.08$
+for the multinomial baseline and a trivial $3.0$ (every class, always) for
+the majority baseline. The majority baseline's set size directly reflects
+that its point probabilities are too flat (identical for every input) to
+ever confidently exclude a class -- it "achieves" coverage only by refusing
+to narrow the answer at all, the degenerate case the average-set-size metric
+exists to catch.
+
+\subsection{Reading the headline number}
+
+The practical takeaway is not "$65\%$ accuracy," which undersells what the
+pipeline actually produces. It is: for a held-out shopper the system never
+saw during training, the calibrated output is typically a set like
+$\{\text{fit}\}$ or $\{\text{fit}, \text{large}\}$ with a guarantee that the
+true outcome falls inside that set at least $90\%$ of the time -- a result a
+single point prediction cannot make and cannot be checked against.

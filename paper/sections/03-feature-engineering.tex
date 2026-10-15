@@ -1,0 +1,97 @@
+\section{Feature engineering}
+\label{sec:feature-engineering}
+
+Table~\ref{tab:features} lists every declared feature, generated directly
+from \texttt{conf/features.yaml} -- the single source of truth consumed by
+both the training job and the serving path
+(Section~\ref{sec:methodology-serving}).
+
+\input{tables/features}
+
+\subsection{Static versus historical aggregate: the distinction that matters}
+
+This dataset makes a distinction that is easy to blur and important to get
+right.
+
+\textbf{Static attributes} -- height, weight, BMI, bust band and cup, body
+type, age, item category -- are known the moment a user fills in a profile
+or an item enters the catalogue. They carry \emph{no} point-in-time
+cut-off because there is no "future" version of a person's height to leak:
+these values simply exist before any review is written, train or test
+alike. \texttt{recommender.features.user\_features} and
+\texttt{item\_features.item\_category} read them directly off the row being
+featurized.
+
+\textbf{Historical aggregates} -- a user's or an item's past mismatch rate,
+and a user's prior review count -- are a fundamentally different kind of
+feature: they summarize \emph{outcomes of other reviews}, and the review
+being predicted is one such outcome. If a user's "prior mismatch rate" were
+computed over \emph{all} of that user's reviews (including the one being
+predicted, or ones that happened later), the feature would partially encode
+the label it is meant to help predict. This is exactly the leak this project
+is built to avoid.
+
+\subsection{Point-in-time construction}
+
+Each review carries two chronological positions, assigned once when the
+dataset is indexed (\texttt{recommender.data.loader.build\_indexed\_dataset},
+\texttt{recommender.features.pipeline.assign\_global\_order}):
+
+\begin{itemize}
+  \item \texttt{review\_order} -- the review's position within its own
+        user's history (0, 1, 2, \ldots), used by the two user-level
+        aggregates.
+  \item \texttt{global\_order} -- the review's position within the entire
+        dataset's chronology (by \texttt{review\_date}), used by the
+        item-level aggregate, since an item can be reviewed by many
+        different users across every partition.
+\end{itemize}
+
+For a review at position $k$ (per the relevant order column), the historical
+aggregate is an \emph{expanding} statistic over strictly prior positions
+only:
+\begin{equation}
+  \widehat{r}(k) = \frac{1}{k} \sum_{j < k} \mathbb{1}[\text{outcome}_j
+  \text{ was a mismatch}], \qquad \widehat{r}(0) \text{ undefined (no prior
+  history)}.
+\end{equation}
+The strict inequality is the entire contract. A review at a given position
+can see every review strictly before it, never the review at its own
+position, and never one after it. This is enforced by computing the
+statistic over a frame sorted by the order column and using an explicit
+less-than comparison, not a window function that could silently include the
+current row (\texttt{interaction\_features.\_expanding\_prior\_mean}).
+
+Rows with no qualifying prior history (a user's or item's very first
+appearance) get \texttt{NaN} from the raw computation; the feature pipeline
+then applies the fill policy declared in \texttt{conf/features.yaml} -- the
+global mismatch rate for the two rate features, zero for the count and the
+small-rate feature, since a user's first review has, by definition, no
+observed directional bias yet.
+
+\subsection{Leakage tests}
+
+\texttt{tests/test\_features\_leakage.py} operationalizes the point-in-time
+contract directly: it injects a fabricated future review (an extreme, label-
+flipping outcome) for an existing user or item, strictly after the real
+cut-off, and asserts that every feature value for rows at or before that
+cut-off is unchanged. A second test asserts the point-in-time aggregate
+differs from a naive whole-history average whenever a user has more than one
+review -- if they ever coincided, every row would be seeing its own future.
+
+\subsection{Context features}
+
+A shopper-stated occasion (\texttt{context\_rented\_for}, e.g.\ "wedding",
+"work") is supplied at request time, like a search filter. It is information
+about the current transaction, not a historical aggregate, so it needs no
+cut-off either -- it exists in exactly the same sense static attributes do.
+
+\subsection{Training/serving parity}
+
+\texttt{FeatureStore.transform} (batch) and \texttt{FeatureStore.row\_vector}
+(single serving-time row) are the only two entry points into the feature
+pipeline, and \texttt{tests/test\_features\_parity.py} asserts they produce
+numerically identical output for the same logical row -- the failure mode
+this guards against is an offline batch computing one feature vector while
+an online request computes a different one for what should be the same
+input.

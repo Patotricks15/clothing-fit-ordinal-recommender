@@ -1,0 +1,160 @@
+\section{Methodology}
+\label{sec:methodology}
+
+\subsection{Cumulative link (proportional-odds) model}
+
+For an ordinal outcome with $K$ levels and feature vector $\xvec$, the
+cumulative-link model~\cite{mccullagh1980,agresti2010} with a logistic link
+assumes
+
+\begin{equation}
+  P(y \le k \mid \xvec) = \sigma(\theta_k - \wvec^\top \xvec),
+  \qquad k = 1, \dots, K - 1,
+  \label{eq:cumulative-link}
+\end{equation}
+
+with ordered thresholds $\theta_1 < \theta_2 < \dots < \theta_{K-1}$ and a
+single weight vector $\wvec$ shared across every threshold -- the
+"proportional odds" / "parallel lines" assumption: a one-unit increase in any
+feature shifts every cumulative log-odds by the same amount
+$-\wvec^\top \xvec$, which is what makes the model genuinely ordinal rather
+than $K-1$ unrelated logistic regressions. By convention
+$P(y \le 0 \mid \xvec) = 0$ and $P(y \le K - 1 \mid \xvec) = 1$, so the
+per-class probability is the first difference of the cumulative
+distribution,
+\begin{equation}
+  P(y = c \mid \xvec) = P(y \le c \mid \xvec) - P(y \le c - 1 \mid \xvec),
+  \qquad c = 0, \dots, K - 1.
+  \label{eq:class-prob}
+\end{equation}
+
+\textbf{Unconstrained parametrization.} An optimizer searching over
+$(\theta_1, \dots, \theta_{K-1})$ directly could produce a non-monotonic,
+invalid threshold vector. We instead optimize over an unconstrained vector
+$\boldsymbol{\delta} \in \mathbb{R}^{K-1}$ and set
+\begin{equation}
+  \theta_1 = \delta_1, \qquad
+  \theta_k = \theta_{k-1} + \operatorname{softplus}(\delta_k)
+  \;\; (k = 2, \dots, K-1),
+\end{equation}
+with $\operatorname{softplus}(z) = \log(1 + e^z) > 0$. Because every gap
+after the first is a strictly positive softplus output, $\theta_1 < \theta_2
+< \dots < \theta_{K-1}$ holds for \emph{any} real-valued $\boldsymbol{\delta}$,
+so an unconstrained quasi-Newton optimizer can never propose an invalid
+threshold ordering. This is implemented in
+\texttt{recommender.models.ordinal.\_thresholds\_from\_raw}.
+
+\subsection{Negative log-likelihood objective}
+
+Given training data $\Dset = \{(\xvec_i, y_i)\}_{i=1}^{n}$, parameters
+$\wvec$ and $\boldsymbol{\theta}$ are fit by minimizing the $\ell_2$-penalized
+negative log-likelihood
+\begin{equation}
+  \mathcal{L}(\wvec, \boldsymbol{\theta})
+  = -\sum_{i=1}^{n} \log P(y = y_i \mid \xvec_i; \wvec, \boldsymbol{\theta})
+  \; + \; \frac{\lambda}{2} \lVert \wvec \rVert_2^2 ,
+  \label{eq:nll}
+\end{equation}
+with $P(y = y_i \mid \cdot)$ given by Equation~\ref{eq:class-prob}
+substituted into Equation~\ref{eq:cumulative-link}. The thresholds are not
+penalized, since shrinking a cut-point toward zero has no natural
+interpretation the way shrinking a feature weight does. Equation~\ref{eq:nll}
+is minimized directly with \texttt{scipy.optimize.minimize} (L-BFGS-B) over
+the unconstrained parameter vector
+$(\delta_1, \dots, \delta_{K-1}, \wvec)$ -- classical convex-leaning
+optimization, with no gradient-descent-trained embedding or neural layer
+anywhere in the model
+(\texttt{recommender.models.ordinal.OrdinalLogisticRegression}).
+
+\subsection{Baselines}
+
+\paragraph{Majority class.} Predicts the single most frequent training
+label for every row, ignoring features entirely. The floor any model using
+features must clear.
+
+\paragraph{Multinomial logistic regression.} The same engineered features,
+fed into an \emph{unordered} softmax classifier,
+\begin{equation}
+  P(y = c \mid \xvec) = \frac{\exp(\wvec_c^\top \xvec)}
+  {\sum_{c'=0}^{K-1} \exp(\wvec_{c'}^\top \xvec)},
+\end{equation}
+fit by the same $\ell_2$-penalized NLL minimization via
+\texttt{scipy.optimize}. Because it assigns an independent weight vector
+$\wvec_c$ to every class, it cannot exploit the ordering the way the
+proportional-odds model's shared $\wvec$ does -- isolating the ordinal
+structure's effect, rather than any difference in optimizer or feature set,
+as the variable under test (Section~\ref{sec:results}).
+
+\subsection{Split conformal prediction}
+
+Any fitted classifier that outputs $\hat{P}(y \mid \xvec)$, ordinal or not,
+can be wrapped in split conformal prediction to produce a prediction
+\emph{set} with a finite-sample marginal coverage guarantee -- implemented
+from scratch in NumPy in \texttt{recommender.models.conformal}.
+
+\paragraph{Nonconformity score.} On a calibration set
+$\Dset_{\text{cal}} = \{(\xvec_i, y_i)\}_{i=1}^{m}$, disjoint from both the
+training and test partitions (here: the validation partition), the
+nonconformity score for example $i$ is
+\begin{equation}
+  \alpha_i = 1 - \hat{P}(y_i \mid \xvec_i),
+  \label{eq:nonconformity}
+\end{equation}
+large exactly when the fitted model placed little probability mass on the
+true label.
+
+\paragraph{Calibration procedure.} For a target miscoverage rate
+$\alpha \in (0, 1)$, let
+\begin{equation}
+  \hat{q} = \text{the } \left\lceil (m+1)(1-\alpha) \right\rceil / m
+  \text{-th empirical quantile of } \{\alpha_1, \dots, \alpha_m\}.
+  \label{eq:qhat}
+\end{equation}
+For a new point $\xvec$, the conformal prediction set is
+\begin{equation}
+  C(\xvec) = \left\{ y \in \{0, \dots, K-1\} :
+  1 - \hat{P}(y \mid \xvec) \le \hat{q} \right\}.
+  \label{eq:prediction-set}
+\end{equation}
+
+\paragraph{Coverage guarantee.} Under the sole assumption that the
+calibration example and the test example are exchangeable (a strictly
+weaker assumption than any distributional or parametric one),
+\begin{equation}
+  P\big(y \in C(\xvec)\big) \; \ge \; 1 - \alpha,
+  \label{eq:coverage-guarantee}
+\end{equation}
+marginally over the randomness in both the calibration set and the new test
+point~\cite{vovk2005,lei2018,angelopoulos2023}. This guarantee is model-agnostic: it holds
+regardless of whether $\hat{P}$ is well-calibrated, over-confident, or
+under-confident, which is precisely why conformal prediction is the right
+tool to pair with a point-prediction model whose own calibration is not
+otherwise guaranteed.
+
+\subsection{Why this problem is calibration, not ranking}
+\label{sec:why-not-ranking}
+
+NDCG, Recall@K and MAP score a \emph{ranked list of items} against a known
+set of relevant ones per user, under an implicit assumption that the
+consumer will see the list top-to-bottom. Nothing in this problem has that
+shape: every example is one independent (user, item, requested size) review
+with a single explicit ordinal label, not a list to be cut off at $K$. There
+is no notion of "relevant items for this user" to rank against, and no
+top-$K$ truncation that would make a ranking metric meaningful. We therefore
+report ordinal-aware classification and calibration metrics
+(Section~\ref{sec:evaluation}) instead of adapting a ranking metric that does
+not fit the problem's shape.
+
+\subsection{Serving}
+\label{sec:methodology-serving}
+
+The fitted model, its scaler, and its calibrated conformal wrapper are
+applied identically whether scoring a batch (training/evaluation) or a
+single incoming request
+(\texttt{recommender.serving.predictions.build\_prediction\_payloads}).
+Rather than running inference inside the request path, predictions for every
+anticipated \texttt{(user, item, size)} triple are precomputed and stored in
+DynamoDB keyed by a composite request id; the inference Lambda
+(\texttt{recommender.serving.handler.lambda\_handler}) is then a pure key
+lookup, bounding p99 latency by DynamoDB rather than by feature
+reconstruction cost.

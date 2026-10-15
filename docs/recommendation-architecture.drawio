@@ -1,0 +1,61 @@
+<mxfile host="Drawpyo" modified="2026-10-15T15:31:27" agent="Python 3.12, Drawpyo 0.23" version="21.6.5" type="device">
+  <diagram name="Recommendation architecture" id="140672466905296">
+    <mxGraphModel dx="2037" dy="830" grid="1" gridSize="10" guides="1" toolTips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="140672458870608" value="Raw reviews&#xa;user · item · size · fit" style="whiteSpace=wrap;rounded=1;fillColor=#F7FAFC;strokeColor=#9AA5B1;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="40" width="260" height="58" as="geometry" />
+</mxCell>
+        <mxCell id="140672458870704" value="Indexed dataset&#xa;review_order per user&#xa;global_order dataset-wide" style="whiteSpace=wrap;rounded=1;fillColor=#FFF4E6;strokeColor=#D45B07;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="158" width="260" height="72" as="geometry" />
+</mxCell>
+        <mxCell id="140672458871280" value="Grouped user split&#xa;train / validation / test&#xa;(no user crosses partitions)" style="whiteSpace=wrap;rounded=1;fillColor=#FFF4E6;strokeColor=#D45B07;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="276" width="260" height="72" as="geometry" />
+</mxCell>
+        <mxCell id="140672458871856" value="Point-in-time features&#xa;static body + catalogue&#xa;expanding history (strict &lt;)" style="whiteSpace=wrap;rounded=1;fillColor=#E6FFFA;strokeColor=#277116;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="394" width="260" height="72" as="geometry" />
+</mxCell>
+        <mxCell id="140672458872432" value="Ordinal logistic regression&#xa;P(y&lt;=k|x)=sigma(theta_k - w^Tx)&#xa;fit via scipy.optimize" style="whiteSpace=wrap;rounded=1;fillColor=#EEF2FF;strokeColor=#4D72F3;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="512" width="260" height="86" as="geometry" />
+</mxCell>
+        <mxCell id="140672458873008" value="Split conformal calibration&#xa;alpha_i = 1 - P(y_i|x_i)&#xa;q_hat from calibration set" style="whiteSpace=wrap;rounded=1;fillColor=#FFF5F5;strokeColor=#C53030;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="645" width="260" height="72" as="geometry" />
+</mxCell>
+        <mxCell id="140672458873584" value="Evaluation&#xa;MAE-ordinal · accuracy@1 · macro-F1&#xa;coverage · avg set size" style="whiteSpace=wrap;rounded=1;fillColor=#FFF5F5;strokeColor=#C53030;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="420" y="778" width="260" height="72" as="geometry" />
+</mxCell>
+        <mxCell id="140672458874160" value="Baselines&#xa;Majority class · Multinomial LR" style="whiteSpace=wrap;rounded=1;fillColor=#F7FAFC;strokeColor=#9AA5B1;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="90" y="506" width="240" height="58" as="geometry" />
+</mxCell>
+        <mxCell id="140672458874736" value="Prediction publication&#xa;DynamoDB · parity-tested" style="whiteSpace=wrap;rounded=1;fillColor=#EEF2FF;strokeColor=#4D72F3;dashed=0;html=1;fontSize=11;fontColor=#232F3E;align=center;verticalAlign=middle;" vertex="1" parent="1">
+  <mxGeometry x="750" y="651" width="240" height="58" as="geometry" />
+</mxCell>
+        <mxCell id="140672458875312" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458870608" target="140672458870704" value="">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458875840" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458870704" target="140672458871280" value="">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458875984" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458871280" target="140672458871856" value="train+val+test">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458876128" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458871856" target="140672458872432" value="design matrix">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458876272" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458872432" target="140672458873008" value="calibration split">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458876416" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458873008" target="140672458873584" value="">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458876560" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458874160" target="140672458873584" value="">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+        <mxCell id="140672458876704" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;rounded=1;jettySize=auto;" edge="1" parent="1" source="140672458873008" target="140672458874736" value="precompute">
+  <mxGeometry relative="1" as="geometry" />
+</mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

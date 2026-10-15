@@ -1,0 +1,65 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Most tabular recommender portfolios that touch an explicit, multi-level
+outcome treat it as an unordered multinomial classification problem, or
+collapse it into a binary "good/bad" signal and reach for a ranking metric.
+Clothing-fit prediction gives a clean counter-example to that default. A
+garment reported as \emph{small}, \emph{fit}, or \emph{large} is not three
+unrelated categories: the levels are strictly ordered, and the cost of
+confusing \emph{small} for \emph{large} is qualitatively worse than
+confusing \emph{small} for \emph{fit}. A model that ignores this ordering
+discards information the problem handed it for free.
+
+\subsection{Two contributions, stated precisely}
+
+This report accompanies a working repository, not a novel method. Its two
+contributions are methodological:
+
+\begin{enumerate}
+  \item \textbf{Ordinal structure, not multinomial.} We fit a
+        proportional-odds cumulative link model (Section~\ref{sec:methodology})
+        instead of treating the three fit levels as unordered classes, and we
+        show this pays off on ordinal-aware metrics
+        (Section~\ref{sec:results}) even though both models see identical
+        features.
+  \item \textbf{Calibrated uncertainty, not a bare label.} Wrapping the
+        fitted model in split conformal prediction turns a point guess into
+        a \emph{set} of plausible outcomes with a finite-sample marginal
+        coverage guarantee (Section~\ref{sec:methodology}). For a sizing
+        recommendation, "this could run fit or large" is a more honest and
+        more actionable signal than a single confident label that is
+        sometimes simply wrong.
+\end{enumerate}
+
+Both pieces are classical machine learning: the cumulative link model is fit
+by maximizing a smooth, explicit likelihood with
+\texttt{scipy.optimize.minimize}, and the conformal calibration is closed-form
+arithmetic over a held-out calibration set. No neural network, embedding
+learned by gradient descent, or deep framework appears anywhere in the
+pipeline.
+
+\subsection{Evaluation honesty}
+
+Users are split at the group level: every review by a given user lands in
+exactly one of train, validation, or test
+(Section~\ref{sec:data}). This prevents the model from memorizing one user's
+exact body-measurement combination and matching it back to that user's
+historical fit outcomes -- a leakage mode specific to supervised tabular
+problems with repeated subjects, distinct from the temporal point-in-time
+leakage that recommender systems usually worry about. Both leakage modes are
+present in this dataset and are tested independently
+(Section~\ref{sec:feature-engineering}).
+
+Hyperparameters for every model, baselines included, are selected on the
+validation partition; the test partition is read once, to produce
+Table~\ref{tab:results}.
+
+\subsection{Repository}
+
+The implementation and the scripts that generate every table in this
+document are available in the accompanying repository. The results table
+(Table~\ref{tab:results}) is emitted by
+\texttt{scripts/export\_results\_table.py} and the feature catalogue
+(Table~\ref{tab:features}) by \texttt{scripts/export\_feature\_tables.py}, so
+the document cannot drift away from the code.
